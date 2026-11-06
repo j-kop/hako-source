@@ -147,6 +147,22 @@ The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a
 3. The `release` workflow builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS and publishes a GitHub Release. The release includes the `.tar.gz` files, `SHA256SUMS`, and `hako.toml`.
 4. Copy the new `[versions."…"]` sections from the release's `hako.toml` into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
 
+## TODO / possible upgrades
+
+### Automatic registry PR for new hako releases
+Replace manual step 4 of [Releasing](#releasing) with a job in the release workflow:
+
+1. Download the new release's `hako.toml`.
+2. Clone `hako-packages` and add the new `[versions."X.Y.Z"]` sections to `packages/hako.toml`, keeping older versions.
+3. Test the change: the freshly built hako installs itself from that branch, checksum included, so a broken manifest never gets a PR.
+4. Push a `hako-X.Y.Z` branch and open a PR "hako X.Y.Z" on `hako-packages`, to be reviewed and merged by hand.
+
+Notes:
+- **Safe to re-run:** do nothing if the version is already in the registry or a PR for it already exists.
+- **Manual trigger:** add a "Run workflow" button that takes a tag, for re-running it for any existing release.
+- **Permissions:** the workflow's built-in `GITHUB_TOKEN` can't write to another repository. It needs a fine-grained personal access token with access to `hako-packages` only, with **Contents** and **Pull requests** set to read and write. Store it in `hako-source` as the Actions secret `HAKO_PACKAGES_TOKEN`. A GitHub App would avoid an expiring token, at the cost of more setup.
+- **Testing:** cut a small real release (e.g. `v0.2.1`) and check that the PR appears on `hako-packages`.
+
 ## License
 
 [MIT](LICENSE)
