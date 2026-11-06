@@ -1,3 +1,5 @@
+!disclaimer! I vibe-coded this whole thing...
+
 # hako (箱)
 
 A git-based package manager. hako clones a **registry** git repo of package manifests, then downloads prebuilt binaries from each package's **own repo** (GitHub Release assets), verifies their sha256, and links them into `~/.hako/bin`.
