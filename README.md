@@ -21,7 +21,7 @@ The repos are private, so hako fetches the registry over SSH (`git@github.com:j-
 ## Usage
 
 ```sh
-hako update                 # clone / pull the registry
+hako update                 # clone / pull all registries
 hako search [query]
 hako info <pkg>
 hako install <pkg>[@version] [--force]
@@ -30,6 +30,24 @@ hako upgrade [pkg]
 hako uninstall <pkg>
 hako doctor
 ```
+
+## Multiple registries
+
+hako can use several registries at once, e.g. one per team:
+
+```sh
+hako registry add team-a git@github.com:team-a/hako-packages.git
+hako registry add team-b git@github.com:team-b/hako-packages.git
+hako registry                  # list registries
+hako registry remove team-b    # its installed packages stay, but won't be upgraded
+```
+
+- `hako install tool` finds `tool` in whichever registry has it.
+- If two registries have a package with the same name, choose one: `hako install team-a/tool`.
+- hako remembers which registry each package came from, and `hako upgrade` upgrades it from there.
+- Two packages can't install the same executable name, even if they come from different registries.
+
+The built-in registry is called `default`. To point it elsewhere, run `hako registry add default <url>`.
 
 Add `~/.hako/bin` to your `PATH`:
 
@@ -40,14 +58,14 @@ export PATH="$HOME/.hako/bin:$PATH"
 ## Environment
 
 - `HAKO_HOME`: root directory (default `~/.hako`)
-- `HAKO_REGISTRY`: overrides the configured registry URL
+- `HAKO_REGISTRY`: overrides the URL of the `default` registry
 
 ## Layout
 
 ```
 ~/.hako/
-  config.toml        registry URL
-  registry/          git clone of the registry
+  config.toml          registry names and URLs
+  registries/<name>/   git clone of each registry
   pkgs/<name>/<ver>/ extracted packages
   bin/               symlinks to package executables
   installed.toml     installed package state
@@ -58,7 +76,7 @@ export PATH="$HOME/.hako/bin:$PATH"
 
 ```sh
 cargo build
-cargo test        # includes an end-to-end test against a local git registry
+cargo test        # includes end-to-end tests against local git registries
 ```
 
-The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a different one, run `hako registry <git-url>` or set `HAKO_REGISTRY`.
+The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a different one, run `hako registry add default <git-url>` or set `HAKO_REGISTRY`.

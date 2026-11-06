@@ -13,9 +13,9 @@ pub enum Cmd {
     Update,
     /// Search packages by name or description (lists all without a query)
     Search { query: Option<String> },
-    /// Show details about a package
+    /// Show details about a package (`name` or `registry/name`)
     Info { name: String },
-    /// Install packages (`name` or `name@version`)
+    /// Install packages (`name`, `name@version`, `registry/name[@version]`)
     Install {
         #[arg(required = true)]
         packages: Vec<String>,
@@ -36,6 +36,21 @@ pub enum Cmd {
     Upgrade { name: Option<String> },
     /// Check the hako environment for problems
     Doctor,
-    /// Show or set the registry git URL
-    Registry { url: Option<String> },
+    /// Manage registries (lists them when no subcommand is given)
+    Registry {
+        #[command(subcommand)]
+        action: Option<RegistryCmd>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RegistryCmd {
+    /// List configured registries
+    #[command(alias = "ls")]
+    List,
+    /// Add a registry, or change the URL of an existing one
+    Add { name: String, url: String },
+    /// Remove a registry (installed packages stay installed)
+    #[command(alias = "rm")]
+    Remove { name: String },
 }

@@ -12,10 +12,17 @@ pub struct State {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Installed {
+    /// Registry the package was installed from (older state files predate this).
+    #[serde(default = "default_registry")]
+    pub registry: String,
     pub version: String,
     pub target: String,
     /// Link names created in `~/.hako/bin`.
     pub bins: Vec<String>,
+}
+
+fn default_registry() -> String {
+    crate::config::DEFAULT_NAME.to_string()
 }
 
 impl State {

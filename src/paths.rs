@@ -18,8 +18,22 @@ impl Paths {
         Ok(Self { root })
     }
 
-    pub fn registry(&self) -> PathBuf {
-        self.root.join("registry")
+    pub fn registries(&self) -> PathBuf {
+        self.root.join("registries")
+    }
+    pub fn registry(&self, name: &str) -> PathBuf {
+        self.registries().join(name)
+    }
+
+    /// hako <= 0.1 kept a single clone in `registry/`; move it to `registries/default/`.
+    pub fn migrate(&self) -> Result<()> {
+        let old = self.root.join("registry");
+        let new = self.registry(crate::config::DEFAULT_NAME);
+        if old.join(".git").exists() && !new.exists() {
+            std::fs::create_dir_all(self.registries())?;
+            std::fs::rename(&old, &new).context("migrating registry clone")?;
+        }
+        Ok(())
     }
     pub fn pkgs(&self) -> PathBuf {
         self.root.join("pkgs")

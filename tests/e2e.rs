@@ -21,6 +21,11 @@ fn git(dir: &Path, args: &[&str]) {
 
 /// tar.gz with `hello-1.0.0/hello` (a shell script) inside a wrapper dir.
 fn make_tarball(path: &Path, msg: &str) -> String {
+    make_tool(path, "hello", msg)
+}
+
+/// tar.gz with `pkg-1.0.0/<bin>`, a shell script that prints `msg`.
+fn make_tool(path: &Path, bin: &str, msg: &str) -> String {
     let script = format!("#!/bin/sh\necho {msg}\n");
     let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     let mut b = tar::Builder::new(gz);
@@ -28,15 +33,20 @@ fn make_tarball(path: &Path, msg: &str) -> String {
     h.set_size(script.len() as u64);
     h.set_mode(0o755);
     h.set_cksum();
-    b.append_data(&mut h, "hello-1.0.0/hello", script.as_bytes()).unwrap();
+    b.append_data(&mut h, format!("pkg-1.0.0/{bin}"), script.as_bytes())
+        .unwrap();
     let bytes = b.into_inner().unwrap().finish().unwrap();
     std::fs::write(path, &bytes).unwrap();
     hex::encode(Sha256::digest(&bytes))
 }
 
 fn manifest(name: &str, versions: &[(&str, &Path, &str)]) -> String {
+    manifest_bin(name, "hello", versions)
+}
+
+fn manifest_bin(name: &str, bin: &str, versions: &[(&str, &Path, &str)]) -> String {
     let mut s = format!(
-        "name = \"{name}\"\ndescription = \"test package {name}\"\nrepo = \"https://example.com/{name}\"\nbin = [\"hello\"]\n"
+        "name = \"{name}\"\ndescription = \"test package {name}\"\nrepo = \"https://example.com/{name}\"\nbin = [\"{bin}\"]\n"
     );
     for (v, url, sha) in versions {
         s += &format!(
@@ -63,15 +73,26 @@ impl Env {
         let assets = tmp.path().join("assets");
         std::fs::create_dir_all(reg.join("packages")).unwrap();
         std::fs::create_dir_all(&assets).unwrap();
-        std::fs::write(reg.join("hako-registry.toml"), "schema = 1\n").unwrap();
-        git(&reg, &["init", "-q"]);
+        init_registry(&reg);
         Env { _tmp: tmp, home, reg, assets }
     }
 
+    /// Create an additional, empty registry repo next to the default one.
+    fn new_registry(&self, dir_name: &str) -> PathBuf {
+        let reg = self._tmp.path().join(dir_name);
+        init_registry(&reg);
+        reg
+    }
+
     fn publish(&self, name: &str, body: &str) {
-        std::fs::write(self.reg.join("packages").join(format!("{name}.toml")), body).unwrap();
-        git(&self.reg, &["add", "-A"]);
-        git(&self.reg, &["commit", "-q", "-m", name]);
+        publish_to(&self.reg, name, body);
+    }
+
+    /// Build a tool tarball and publish its manifest to `reg`.
+    fn publish_tool(&self, reg: &Path, name: &str, bin: &str, version: &str, msg: &str) {
+        let asset = self.assets.join(format!("{name}-{version}-{msg}.tar.gz"));
+        let sha = make_tool(&asset, bin, msg);
+        publish_to(reg, name, &manifest_bin(name, bin, &[(version, &asset, &sha)]));
     }
 
     fn hako(&self) -> Command {
@@ -81,6 +102,34 @@ impl Env {
             .env("PATH", std::env::var("PATH").unwrap());
         c
     }
+}
+
+fn init_registry(reg: &Path) {
+    std::fs::create_dir_all(reg.join("packages")).unwrap();
+    std::fs::write(reg.join("hako-registry.toml"), "schema = 1\n").unwrap();
+    git(reg, &["init", "-q"]);
+}
+
+fn publish_to(reg: &Path, name: &str, body: &str) {
+    std::fs::write(reg.join("packages").join(format!("{name}.toml")), body).unwrap();
+    git(reg, &["add", "-A"]);
+    git(reg, &["commit", "-q", "-m", name]);
+}
+
+/// Run a command that is expected to fail; return its stderr.
+fn failure(c: &mut Command) -> String {
+    let out = c.output().unwrap();
+    assert!(
+        !out.status.success(),
+        "command unexpectedly succeeded:\nstdout: {}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+fn run_bin(path: &Path) -> String {
+    let out = std::process::Command::new(path).output().unwrap();
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }
 
 fn stdout(c: &mut Command) -> String {
@@ -166,4 +215,124 @@ fn unknown_schema_is_rejected() {
     let out = env.hako().arg("update").output().unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("schema 99"));
+}
+
+#[test]
+fn two_registries() {
+    let env = Env::new();
+    let team_b = env.new_registry("team-b");
+    env.publish_tool(&env.reg, "alpha", "alpha", "1.0.0", "alpha-default");
+    env.publish_tool(&env.reg, "shared", "shared", "1.0.0", "shared-default");
+    env.publish_tool(&team_b, "beta", "beta", "1.0.0", "beta-v1");
+    env.publish_tool(&team_b, "shared", "shared", "1.0.0", "shared-team-b");
+
+    let team_b_url = team_b.to_string_lossy().into_owned();
+    assert!(stdout(env.hako().args(["registry", "add", "team-b", &team_b_url]))
+        .contains("added registry team-b (2 packages)"));
+    let list = stdout(env.hako().args(["registry", "list"]));
+    assert!(list.contains("default") && list.contains("team-b"), "{list}");
+
+    // Search covers both registries; `shared` shows up once per registry.
+    let found = stdout(env.hako().arg("search"));
+    assert_eq!(found.lines().filter(|l| l.starts_with("shared ")).count(), 2, "{found}");
+    assert!(found.contains("beta") && found.contains("team-b"), "{found}");
+
+    // Unambiguous names install from whichever registry has them.
+    assert!(stdout(env.hako().args(["install", "alpha", "beta"])).contains("from team-b"));
+    assert_eq!(run_bin(&env.home.join("bin/alpha")), "alpha-default");
+    assert_eq!(run_bin(&env.home.join("bin/beta")), "beta-v1");
+
+    // Ambiguous names must be qualified.
+    let err = failure(env.hako().args(["install", "shared"]));
+    assert!(err.contains("default/shared, team-b/shared"), "{err}");
+    stdout(env.hako().args(["install", "team-b/shared"]));
+    assert_eq!(run_bin(&env.home.join("bin/shared")), "shared-team-b");
+
+    // Once installed, the unqualified name resolves to where it came from...
+    assert!(stdout(env.hako().args(["install", "shared"])).contains("already installed"));
+    assert!(stdout(env.hako().args(["info", "shared"])).contains("registry:    team-b"));
+    // ...and switching registries requires an explicit uninstall.
+    let err = failure(env.hako().args(["install", "default/shared"]));
+    assert!(err.contains("already installed from registry `team-b`"), "{err}");
+
+    let listed = stdout(env.hako().arg("list"));
+    assert!(listed.lines().any(|l| l.starts_with("alpha") && l.contains("default")), "{listed}");
+    assert!(listed.lines().any(|l| l.starts_with("beta") && l.contains("team-b")), "{listed}");
+
+    // Upgrade pulls each package from its own registry.
+    env.publish_tool(&team_b, "beta", "beta", "2.0.0", "beta-v2");
+    let out = stdout(env.hako().arg("upgrade"));
+    assert!(out.contains("upgraded beta 1.0.0 -> 2.0.0"), "{out}");
+    assert_eq!(run_bin(&env.home.join("bin/beta")), "beta-v2");
+
+    // Removing a registry keeps its packages installed but stops upgrades for them.
+    let out = stdout(env.hako().args(["registry", "remove", "team-b"]));
+    assert!(out.contains("beta, shared"), "{out}");
+    assert!(!env.home.join("registries/team-b").exists());
+    assert!(!stdout(env.hako().args(["registry", "list"])).contains("team-b"));
+    let out = env.hako().arg("upgrade").output().unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("registry `team-b` is no longer configured"));
+    assert_eq!(run_bin(&env.home.join("bin/beta")), "beta-v2");
+}
+
+#[test]
+fn bin_conflicts_across_registries() {
+    let env = Env::new();
+    let team_b = env.new_registry("team-b");
+    env.publish_tool(&env.reg, "deploy-a", "deploy", "1.0.0", "a");
+    env.publish_tool(&team_b, "deploy-b", "deploy", "1.0.0", "b");
+    stdout(env.hako().args(["registry", "add", "team-b", &team_b.to_string_lossy()]));
+
+    stdout(env.hako().args(["install", "deploy-a"]));
+    let err = failure(env.hako().args(["install", "deploy-b"]));
+    assert!(
+        err.contains("`deploy` is already provided by package `deploy-a` (from registry `default`)"),
+        "{err}"
+    );
+    assert_eq!(run_bin(&env.home.join("bin/deploy")), "a");
+}
+
+#[test]
+fn bad_registry_url_is_not_saved() {
+    let env = Env::new();
+    let missing = env.home.join("does-not-exist");
+    failure(env.hako().args(["registry", "add", "broken", &missing.to_string_lossy()]));
+    assert!(!stdout(env.hako().args(["registry", "list"])).contains("broken"));
+    failure(env.hako().args(["registry", "add", "Bad/Name", &env.reg.to_string_lossy()]));
+}
+
+#[test]
+fn migrates_single_registry_setup() {
+    // Simulate a hako 0.1 home: `registry = "<url>"` in config + a clone in `registry/`.
+    let env = Env::new();
+    env.publish_tool(&env.reg, "alpha", "alpha", "1.0.0", "alpha");
+    std::fs::create_dir_all(&env.home).unwrap();
+    std::fs::write(
+        env.home.join("config.toml"),
+        format!("registry = {:?}\n", env.reg.to_string_lossy()),
+    )
+    .unwrap();
+    std::process::Command::new("git")
+        .args(["clone", "-q"])
+        .arg(&env.reg)
+        .arg(env.home.join("registry"))
+        .status()
+        .unwrap();
+    std::fs::write(
+        env.home.join("installed.toml"),
+        "[packages.old]\nversion = \"1.0.0\"\ntarget = \"x\"\nbins = []\n",
+    )
+    .unwrap();
+
+    let mut c = Command::cargo_bin("hako").unwrap();
+    c.env("HAKO_HOME", &env.home).env_remove("HAKO_REGISTRY");
+    assert!(stdout(c.args(["registry", "list"])).contains("default"));
+    assert!(env.home.join("registries/default/.git").exists());
+    assert!(!env.home.join("registry").exists());
+
+    let mut c = Command::cargo_bin("hako").unwrap();
+    c.env("HAKO_HOME", &env.home).env_remove("HAKO_REGISTRY");
+    let listed = stdout(c.arg("list"));
+    assert!(listed.lines().any(|l| l.starts_with("old") && l.contains("default")), "{listed}");
 }

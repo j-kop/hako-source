@@ -12,10 +12,10 @@ mod verify;
 
 use anyhow::{bail, Result};
 use clap::Parser;
-use cli::{Cli, Cmd};
+use cli::{Cli, Cmd, RegistryCmd};
 use config::Config;
 use paths::Paths;
-use registry::Registry;
+use registry::{Registries, Registry};
 use state::State;
 
 fn main() {
@@ -26,37 +26,79 @@ fn main() {
     }
 }
 
-/// Open the registry, cloning it first if it isn't present yet.
-fn registry(paths: &Paths) -> Result<Registry> {
-    if paths.registry().exists() {
-        return Registry::open(paths);
+/// Open all configured registries, cloning any that aren't present yet.
+/// A registry that fails is reported and skipped.
+fn open_registries(paths: &Paths) -> Result<Registries> {
+    let mut list = Vec::new();
+    for (name, url) in Config::load(paths)?.registries()? {
+        let result = if paths.registry(&name).exists() {
+            Registry::open(paths, &name)
+        } else {
+            println!("fetching registry {name} ({url})");
+            registry::update(paths, &name, &url)
+        };
+        match result {
+            Ok(r) => list.push(r),
+            Err(e) => eprintln!("warning: {e:#}"),
+        }
     }
-    let url = Config::load(paths)?.registry_url()?;
-    println!("fetching registry {url}");
-    registry::update(paths, &url)
+    if list.is_empty() {
+        bail!("no usable registries");
+    }
+    Ok(Registries { list })
+}
+
+/// Pull every configured registry. Returns the registries that updated and the failure count.
+fn update_all(paths: &Paths) -> Result<(Registries, usize)> {
+    let mut list = Vec::new();
+    let mut failed = 0;
+    for (name, url) in Config::load(paths)?.registries()? {
+        match registry::update(paths, &name, &url) {
+            Ok(r) => {
+                println!("updated {name} ({} packages)", r.all()?.len());
+                list.push(r);
+            }
+            Err(e) => {
+                eprintln!("error: {e:#}");
+                failed += 1;
+            }
+        }
+    }
+    Ok((Registries { list }, failed))
 }
 
 fn run(cli: Cli) -> Result<()> {
     let paths = Paths::new()?;
+    paths.migrate()?;
     match cli.cmd {
         Cmd::Update => {
-            let url = Config::load(&paths)?.registry_url()?;
-            let reg = registry::update(&paths, &url)?;
-            println!("registry updated ({} packages)", reg.all()?.len());
+            let (_, failed) = update_all(&paths)?;
+            if failed > 0 {
+                bail!("{failed} registry(ies) failed to update");
+            }
         }
         Cmd::Search { query } => {
-            let reg = registry(&paths)?;
+            let regs = open_registries(&paths)?;
             let q = query.unwrap_or_default().to_lowercase();
             let state = State::load(&paths)?;
             let mut found = 0;
-            for m in reg.all()? {
-                if q.is_empty()
-                    || m.name.contains(&q)
-                    || m.description.to_lowercase().contains(&q)
-                {
+            for reg in &regs.list {
+                for m in reg.all()? {
+                    if !(q.is_empty()
+                        || m.name.contains(&q)
+                        || m.description.to_lowercase().contains(&q))
+                    {
+                        continue;
+                    }
                     let latest = m.latest().map(|(v, _)| v).unwrap_or("-");
-                    let mark = if state.packages.contains_key(&m.name) { " [installed]" } else { "" };
-                    println!("{:<20} {:<12} {}{mark}", m.name, latest, m.description);
+                    let mark = match state.packages.get(&m.name) {
+                        Some(i) if i.registry == reg.name => " [installed]",
+                        _ => "",
+                    };
+                    println!(
+                        "{:<20} {:<10} {:<12} {}{mark}",
+                        m.name, reg.name, latest, m.description
+                    );
                     found += 1;
                 }
             }
@@ -65,11 +107,14 @@ fn run(cli: Cli) -> Result<()> {
             }
         }
         Cmd::Info { name } => {
-            let reg = registry(&paths)?;
-            let m = reg.load(&name)?;
+            let regs = open_registries(&paths)?;
             let state = State::load(&paths)?;
+            let (_, bare) = registry::split_qualified(&name);
+            let prefer = state.packages.get(bare).map(|i| i.registry.as_str());
+            let (reg, m) = regs.find(&name, prefer)?;
             let target = platform::current_target().unwrap_or_default();
             println!("name:        {}", m.name);
+            println!("registry:    {}", reg.name);
             println!("description: {}", m.description);
             println!("repo:        {}", m.repo);
             if let Some(l) = &m.license {
@@ -77,7 +122,8 @@ fn run(cli: Cli) -> Result<()> {
             }
             println!("bin:         {}", m.bin.join(", "));
             match state.packages.get(&m.name) {
-                Some(i) => println!("installed:   {}", i.version),
+                Some(i) if i.registry == reg.name => println!("installed:   {}", i.version),
+                Some(i) => println!("installed:   {} (from registry {})", i.version, i.registry),
                 None => println!("installed:   no"),
             }
             println!("versions:");
@@ -97,10 +143,10 @@ fn run(cli: Cli) -> Result<()> {
             }
         }
         Cmd::Install { packages, force } => {
-            let reg = registry(&paths)?;
+            let regs = open_registries(&paths)?;
             let mut failed = 0;
             for p in &packages {
-                if let Err(e) = install::install(&paths, &reg, p, force) {
+                if let Err(e) = install::install(&paths, &regs, p, force) {
                     eprintln!("error: {p}: {e:#}");
                     failed += 1;
                 }
@@ -111,7 +157,8 @@ fn run(cli: Cli) -> Result<()> {
         }
         Cmd::Uninstall { packages } => {
             for p in &packages {
-                install::uninstall(&paths, p)?;
+                let (_, bare) = registry::split_qualified(p);
+                install::uninstall(&paths, bare)?;
             }
         }
         Cmd::List => {
@@ -120,27 +167,74 @@ fn run(cli: Cli) -> Result<()> {
                 println!("no packages installed");
             }
             for (n, i) in &state.packages {
-                println!("{n:<20} {:<12} {}", i.version, i.bins.join(", "));
+                println!(
+                    "{n:<20} {:<10} {:<12} {}",
+                    i.registry,
+                    i.version,
+                    i.bins.join(", ")
+                );
             }
         }
         Cmd::Upgrade { name } => {
-            let url = Config::load(&paths)?.registry_url()?;
-            let reg = registry::update(&paths, &url)?;
-            install::upgrade(&paths, &reg, name.as_deref())?;
+            let (regs, failed) = update_all(&paths)?;
+            if failed > 0 {
+                eprintln!("warning: some registries failed to update; upgrading from the rest");
+            }
+            let only = name.as_deref().map(|n| registry::split_qualified(n).1);
+            install::upgrade(&paths, &regs, only)?;
         }
         Cmd::Doctor => doctor(&paths)?,
-        Cmd::Registry { url } => {
-            let mut cfg = Config::load(&paths)?;
-            match url {
-                Some(u) => {
-                    cfg.registry = Some(u.clone());
-                    cfg.save(&paths)?;
-                    println!("registry set to {u}; run `hako update`");
-                }
-                None => match cfg.registry_url() {
-                    Ok(u) => println!("{u}"),
-                    Err(e) => println!("{e}"),
-                },
+        Cmd::Registry { action } => registry_cmd(&paths, action.unwrap_or(RegistryCmd::List))?,
+    }
+    Ok(())
+}
+
+fn registry_cmd(paths: &Paths, action: RegistryCmd) -> Result<()> {
+    let mut cfg = Config::load(paths)?;
+    match action {
+        RegistryCmd::List => {
+            for (name, url) in cfg.registries()? {
+                let status = match Registry::open(paths, &name).and_then(|r| r.all()) {
+                    Ok(pkgs) => format!("{} packages", pkgs.len()),
+                    Err(_) if !paths.registry(&name).exists() => "not cloned yet".into(),
+                    Err(e) => format!("error: {e:#}"),
+                };
+                println!("{name:<12} {url}  ({status})");
+            }
+        }
+        RegistryCmd::Add { name, url } => {
+            let old = cfg.add(&name, &url)?;
+            // Clone before saving, so a bad URL doesn't end up in the config.
+            let reg = registry::update(paths, &name, &url)?;
+            cfg.save(paths)?;
+            let n = reg.all()?.len();
+            match old {
+                Some(o) if o != url => println!("updated registry {name}: {o} -> {url} ({n} packages)"),
+                Some(_) => println!("registry {name} is already configured ({n} packages)"),
+                None => println!("added registry {name} ({n} packages)"),
+            }
+        }
+        RegistryCmd::Remove { name } => {
+            if !cfg.remove(&name) {
+                bail!("no registry named `{name}`");
+            }
+            cfg.save(paths)?;
+            let dir = paths.registry(&name);
+            if dir.exists() {
+                std::fs::remove_dir_all(&dir)?;
+            }
+            println!("removed registry {name}");
+            let orphans: Vec<_> = State::load(paths)?
+                .packages
+                .into_iter()
+                .filter(|(_, i)| i.registry == name)
+                .map(|(n, _)| n)
+                .collect();
+            if !orphans.is_empty() {
+                println!(
+                    "note: still installed from {name} (won't be upgraded): {}",
+                    orphans.join(", ")
+                );
             }
         }
     }
@@ -162,12 +256,15 @@ fn doctor(paths: &Paths) -> Result<()> {
         Ok(t) => check(true, format!("platform supported ({t})")),
         Err(e) => check(false, format!("{e}")),
     }
-    match Config::load(paths).and_then(|c| c.registry_url()) {
-        Ok(u) => check(true, format!("registry configured ({u})")),
-        Err(e) => check(false, format!("{e:#}")),
-    }
-    match Registry::open(paths) {
-        Ok(_) => check(true, "registry cloned and schema supported".into()),
+    match Config::load(paths).and_then(|c| c.registries()) {
+        Ok(regs) => {
+            for (name, url) in regs {
+                match Registry::open(paths, &name) {
+                    Ok(_) => check(true, format!("registry {name} ({url})")),
+                    Err(e) => check(false, format!("{e:#}")),
+                }
+            }
+        }
         Err(e) => check(false, format!("{e:#}")),
     }
     check(

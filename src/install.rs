@@ -2,7 +2,7 @@ use crate::extract::{self, Kind};
 use crate::manifest::Manifest;
 use crate::paths::Paths;
 use crate::platform;
-use crate::registry::Registry;
+use crate::registry::{split_qualified, Registries};
 use crate::state::{Installed, State};
 use crate::{download, verify};
 use anyhow::{bail, Context, Result};
@@ -22,9 +22,22 @@ fn link_name(bin: &str) -> String {
         .unwrap_or_else(|| bin.to_string())
 }
 
-pub fn install(paths: &Paths, reg: &Registry, spec: &str, force: bool) -> Result<()> {
-    let (name, req) = split_spec(spec);
-    let m = reg.load(name)?;
+pub fn install(paths: &Paths, regs: &Registries, spec: &str, force: bool) -> Result<()> {
+    let (qualified, req) = split_spec(spec);
+    let (_, bare) = split_qualified(qualified);
+    let mut state = State::load(paths)?;
+    let previous = state.packages.get(bare).cloned();
+    let (reg, m) = regs.find(qualified, previous.as_ref().map(|p| p.registry.as_str()))?;
+    let name = m.name.as_str();
+    if let Some(p) = &previous {
+        if p.registry != reg.name {
+            bail!(
+                "{name} is already installed from registry `{}`; uninstall it first to switch to `{}`",
+                p.registry,
+                reg.name
+            );
+        }
+    }
     let (version, ver) = m.resolve(req)?;
     let target_key = platform::current_target()?;
     let target = ver.targets.get(&target_key).with_context(|| {
@@ -36,8 +49,6 @@ pub fn install(paths: &Paths, reg: &Registry, spec: &str, force: bool) -> Result
     })?;
 
     paths.ensure()?;
-    let mut state = State::load(paths)?;
-    let previous = state.packages.get(name).cloned();
     if let Some(p) = &previous {
         if p.version == version && !force {
             println!("{name} {version} is already installed (use --force to reinstall)");
@@ -50,7 +61,8 @@ pub fn install(paths: &Paths, reg: &Registry, spec: &str, force: bool) -> Result
     for l in &links {
         if let Some(owner) = state.owner_of_bin(l) {
             if owner != name {
-                bail!("`{l}` is already provided by package `{owner}`");
+                let from = &state.packages[owner].registry;
+                bail!("`{l}` is already provided by package `{owner}` (from registry `{from}`)");
             }
         } else if paths.bin().join(l).symlink_metadata().is_ok() {
             bail!("{} already exists and is not managed by hako", paths.bin().join(l).display());
@@ -99,6 +111,7 @@ pub fn install(paths: &Paths, reg: &Registry, spec: &str, force: bool) -> Result
     state.packages.insert(
         name.to_string(),
         Installed {
+            registry: reg.name.clone(),
             version: version.to_string(),
             target: target_key,
             bins: links.clone(),
@@ -116,7 +129,11 @@ pub fn install(paths: &Paths, reg: &Registry, spec: &str, force: bool) -> Result
         Some(p) if p.version != version => {
             println!("upgraded {name} {} -> {version}", p.version)
         }
-        _ => println!("installed {name} {version} ({})", links.join(", ")),
+        _ => println!(
+            "installed {name} {version} from {} ({})",
+            reg.name,
+            links.join(", ")
+        ),
     }
     path_hint(paths);
     Ok(())
@@ -213,7 +230,7 @@ pub fn uninstall(paths: &Paths, name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn upgrade(paths: &Paths, reg: &Registry, only: Option<&str>) -> Result<()> {
+pub fn upgrade(paths: &Paths, regs: &Registries, only: Option<&str>) -> Result<()> {
     let state = State::load(paths)?;
     let names: Vec<String> = match only {
         Some(n) => {
@@ -228,6 +245,13 @@ pub fn upgrade(paths: &Paths, reg: &Registry, only: Option<&str>) -> Result<()> 
     let mut failed = 0;
     for n in names {
         let installed = &state.packages[&n];
+        let Some(reg) = regs.get(&installed.registry) else {
+            eprintln!(
+                "warning: {n}: registry `{}` is no longer configured; skipping",
+                installed.registry
+            );
+            continue;
+        };
         let m = match reg.load(&n) {
             Ok(m) => m,
             Err(e) => {
@@ -244,7 +268,7 @@ pub fn upgrade(paths: &Paths, reg: &Registry, only: Option<&str>) -> Result<()> 
             _ => false,
         };
         if newer {
-            match install(paths, reg, &format!("{n}@{latest}"), false) {
+            match install(paths, regs, &format!("{}/{n}@{latest}", reg.name), false) {
                 Ok(()) => upgraded += 1,
                 Err(e) => {
                     eprintln!("error: upgrading {n}: {e:#}");
