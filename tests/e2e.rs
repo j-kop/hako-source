@@ -220,69 +220,69 @@ fn unknown_schema_is_rejected() {
 #[test]
 fn two_registries() {
     let env = Env::new();
-    let team_b = env.new_registry("team-b");
+    let registry_b = env.new_registry("registry-b");
     env.publish_tool(&env.reg, "alpha", "alpha", "1.0.0", "alpha-default");
     env.publish_tool(&env.reg, "shared", "shared", "1.0.0", "shared-default");
-    env.publish_tool(&team_b, "beta", "beta", "1.0.0", "beta-v1");
-    env.publish_tool(&team_b, "shared", "shared", "1.0.0", "shared-team-b");
+    env.publish_tool(&registry_b, "beta", "beta", "1.0.0", "beta-v1");
+    env.publish_tool(&registry_b, "shared", "shared", "1.0.0", "shared-registry-b");
 
-    let team_b_url = team_b.to_string_lossy().into_owned();
-    assert!(stdout(env.hako().args(["registry", "add", "team-b", &team_b_url]))
-        .contains("added registry team-b (2 packages)"));
+    let registry_b_url = registry_b.to_string_lossy().into_owned();
+    assert!(stdout(env.hako().args(["registry", "add", "registry-b", &registry_b_url]))
+        .contains("added registry registry-b (2 packages)"));
     let list = stdout(env.hako().args(["registry", "list"]));
-    assert!(list.contains("default") && list.contains("team-b"), "{list}");
+    assert!(list.contains("default") && list.contains("registry-b"), "{list}");
 
     // Search covers both registries; `shared` shows up once per registry.
     let found = stdout(env.hako().arg("search"));
     assert_eq!(found.lines().filter(|l| l.starts_with("shared ")).count(), 2, "{found}");
-    assert!(found.contains("beta") && found.contains("team-b"), "{found}");
+    assert!(found.contains("beta") && found.contains("registry-b"), "{found}");
 
     // Unambiguous names install from whichever registry has them.
-    assert!(stdout(env.hako().args(["install", "alpha", "beta"])).contains("from team-b"));
+    assert!(stdout(env.hako().args(["install", "alpha", "beta"])).contains("from registry-b"));
     assert_eq!(run_bin(&env.home.join("bin/alpha")), "alpha-default");
     assert_eq!(run_bin(&env.home.join("bin/beta")), "beta-v1");
 
     // Ambiguous names must be qualified.
     let err = failure(env.hako().args(["install", "shared"]));
-    assert!(err.contains("default/shared, team-b/shared"), "{err}");
-    stdout(env.hako().args(["install", "team-b/shared"]));
-    assert_eq!(run_bin(&env.home.join("bin/shared")), "shared-team-b");
+    assert!(err.contains("default/shared, registry-b/shared"), "{err}");
+    stdout(env.hako().args(["install", "registry-b/shared"]));
+    assert_eq!(run_bin(&env.home.join("bin/shared")), "shared-registry-b");
 
     // Once installed, the unqualified name resolves to where it came from...
     assert!(stdout(env.hako().args(["install", "shared"])).contains("already installed"));
-    assert!(stdout(env.hako().args(["info", "shared"])).contains("registry:    team-b"));
+    assert!(stdout(env.hako().args(["info", "shared"])).contains("registry:    registry-b"));
     // ...and switching registries requires an explicit uninstall.
     let err = failure(env.hako().args(["install", "default/shared"]));
-    assert!(err.contains("already installed from registry `team-b`"), "{err}");
+    assert!(err.contains("already installed from registry `registry-b`"), "{err}");
 
     let listed = stdout(env.hako().arg("list"));
     assert!(listed.lines().any(|l| l.starts_with("alpha") && l.contains("default")), "{listed}");
-    assert!(listed.lines().any(|l| l.starts_with("beta") && l.contains("team-b")), "{listed}");
+    assert!(listed.lines().any(|l| l.starts_with("beta") && l.contains("registry-b")), "{listed}");
 
     // Upgrade pulls each package from its own registry.
-    env.publish_tool(&team_b, "beta", "beta", "2.0.0", "beta-v2");
+    env.publish_tool(&registry_b, "beta", "beta", "2.0.0", "beta-v2");
     let out = stdout(env.hako().arg("upgrade"));
     assert!(out.contains("upgraded beta 1.0.0 -> 2.0.0"), "{out}");
     assert_eq!(run_bin(&env.home.join("bin/beta")), "beta-v2");
 
     // Removing a registry keeps its packages installed but stops upgrades for them.
-    let out = stdout(env.hako().args(["registry", "remove", "team-b"]));
+    let out = stdout(env.hako().args(["registry", "remove", "registry-b"]));
     assert!(out.contains("beta, shared"), "{out}");
-    assert!(!env.home.join("registries/team-b").exists());
-    assert!(!stdout(env.hako().args(["registry", "list"])).contains("team-b"));
+    assert!(!env.home.join("registries/registry-b").exists());
+    assert!(!stdout(env.hako().args(["registry", "list"])).contains("registry-b"));
     let out = env.hako().arg("upgrade").output().unwrap();
     assert!(out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("registry `team-b` is no longer configured"));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("registry `registry-b` is no longer configured"));
     assert_eq!(run_bin(&env.home.join("bin/beta")), "beta-v2");
 }
 
 #[test]
 fn bin_conflicts_across_registries() {
     let env = Env::new();
-    let team_b = env.new_registry("team-b");
+    let registry_b = env.new_registry("registry-b");
     env.publish_tool(&env.reg, "deploy-a", "deploy", "1.0.0", "a");
-    env.publish_tool(&team_b, "deploy-b", "deploy", "1.0.0", "b");
-    stdout(env.hako().args(["registry", "add", "team-b", &team_b.to_string_lossy()]));
+    env.publish_tool(&registry_b, "deploy-b", "deploy", "1.0.0", "b");
+    stdout(env.hako().args(["registry", "add", "registry-b", &registry_b.to_string_lossy()]));
 
     stdout(env.hako().args(["install", "deploy-a"]));
     let err = failure(env.hako().args(["install", "deploy-b"]));

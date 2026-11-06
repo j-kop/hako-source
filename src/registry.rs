@@ -13,7 +13,7 @@ struct RegistryMeta {
     schema: u32,
 }
 
-/// One cloned registry (e.g. `default`, `team-a`).
+/// One cloned registry (e.g. `default`, `registry-a`).
 pub struct Registry {
     pub name: String,
     dir: PathBuf,
@@ -130,7 +130,7 @@ impl Registry {
     }
 }
 
-/// Split `team-a/tool` into (`Some("team-a")`, `tool`); `tool` into (`None`, `tool`).
+/// Split `registry-a/tool` into (`Some("registry-a")`, `tool`); `tool` into (`None`, `tool`).
 pub fn split_qualified(name: &str) -> (Option<&str>, &str) {
     match name.split_once('/') {
         Some((r, p)) => (Some(r), p),
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn qualified_names() {
-        assert_eq!(split_qualified("team-a/tool"), (Some("team-a"), "tool"));
+        assert_eq!(split_qualified("registry-a/tool"), (Some("registry-a"), "tool"));
         assert_eq!(split_qualified("tool"), (None, "tool"));
     }
 }
