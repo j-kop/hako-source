@@ -39,17 +39,17 @@ hako doctor
 
 ## Multiple registries
 
-hako can use several registries at once, e.g. one per team:
+hako can use several registries at once:
 
 ```sh
-hako registry add team-a git@github.com:team-a/hako-packages.git
-hako registry add team-b git@github.com:team-b/hako-packages.git
-hako registry                  # list registries
-hako registry remove team-b    # its installed packages stay, but won't be upgraded
+hako registry add registry-a https://github.com/you/registry-a.git
+hako registry add registry-b https://github.com/you/registry-b.git
+hako registry                      # list registries
+hako registry remove registry-b    # its installed packages stay, but won't be upgraded
 ```
 
 - `hako install tool` finds `tool` in whichever registry has it.
-- If two registries have a package with the same name, choose one: `hako install team-a/tool`.
+- If two registries have a package with the same name, choose one: `hako install registry-a/tool`.
 - hako remembers which registry each package came from, and `hako upgrade` upgrades it from there.
 - Two packages can't install the same executable name, even if they come from different registries.
 
