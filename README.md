@@ -13,8 +13,10 @@ A git-based package manager. hako clones a **registry** git repo of package mani
 ## Install
 
 ```sh
-cargo install --git https://github.com/j-kop/hako-source
+cargo install --git ssh://git@github.com/j-kop/hako-source
 ```
+
+The repos are private, so hako fetches the registry over SSH (`git@github.com:j-kop/hako-packages.git`). You need an SSH key added to your GitHub account.
 
 ## Usage
 

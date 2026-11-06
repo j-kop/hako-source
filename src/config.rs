@@ -3,7 +3,7 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Official registry, used unless overridden by `hako registry <url>` or `$HAKO_REGISTRY`.
-pub const DEFAULT_REGISTRY: Option<&str> = Some("https://github.com/j-kop/hako-packages.git");
+pub const DEFAULT_REGISTRY: Option<&str> = Some("git@github.com:j-kop/hako-packages.git");
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Config {
