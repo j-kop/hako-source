@@ -1,0 +1,31 @@
+[package]
+name = "hako"
+version = "0.1.0"
+edition = "2021"
+description = "箱 (hako) — a git-based package manager"
+license = "MIT"
+repository = "https://github.com/j-kop/hako-source"
+
+[[bin]]
+name = "hako"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+dirs = "5"
+flate2 = "1"
+hex = "0.4"
+indicatif = "0.17"
+lzma-rs = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+tar = "0.4"
+toml = "0.8"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+tempfile = "3"
