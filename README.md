@@ -91,3 +91,7 @@ The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a
 2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
 3. The `release` workflow builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS and publishes a GitHub Release. The release includes the `.tar.gz` files, `SHA256SUMS`, and `hako.toml`.
 4. Copy the new `[versions."…"]` sections from the release's `hako.toml` into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
+
+## License
+
+[MIT](LICENSE)

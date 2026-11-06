@@ -54,7 +54,7 @@ jobs:
         run: |
           dir="hako-${GITHUB_REF_NAME#v}-${{ matrix.key }}"
           mkdir "$dir"
-          cp "target/${{ matrix.target }}/release/hako" README.md "$dir/"
+          cp "target/${{ matrix.target }}/release/hako" README.md LICENSE "$dir/"
           tar czf "hako-${{ matrix.key }}.tar.gz" "$dir"
 
       - uses: actions/upload-artifact@v4
