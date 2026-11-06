@@ -1,3 +1,5 @@
+//! User configuration (`config.toml`): which registries hako uses.
+
 use crate::manifest::valid_name;
 use crate::paths::{write_atomic, Paths};
 use anyhow::{bail, Context, Result};
@@ -10,6 +12,7 @@ pub const DEFAULT_NAME: &str = "default";
 /// Built-in registry, used until the user configures registries themselves.
 pub const DEFAULT_REGISTRY: Option<&str> = Some("https://github.com/j-kop/hako-packages.git");
 
+/// Contents of `config.toml`.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Config {
     /// Named registries (name -> git URL). `None` means "never configured":
@@ -21,6 +24,7 @@ pub struct Config {
     registry: Option<String>,
 }
 
+/// The built-in registry list (just `default`).
 fn builtin() -> BTreeMap<String, String> {
     DEFAULT_REGISTRY
         .map(|u| BTreeMap::from([(DEFAULT_NAME.to_string(), u.to_string())]))
@@ -28,6 +32,8 @@ fn builtin() -> BTreeMap<String, String> {
 }
 
 impl Config {
+    /// Loads `config.toml`, or the defaults if it doesn't exist yet.
+    /// A legacy single `registry` setting is migrated to the `default` registry.
     pub fn load(paths: &Paths) -> Result<Self> {
         let f = paths.config_file();
         if !f.exists() {
@@ -45,6 +51,7 @@ impl Config {
         Ok(cfg)
     }
 
+    /// Writes the configuration to `config.toml`.
     pub fn save(&self, paths: &Paths) -> Result<()> {
         write_atomic(&paths.config_file(), &toml::to_string_pretty(self)?)
     }
@@ -64,6 +71,7 @@ impl Config {
         Ok(map)
     }
 
+    /// The stored registry list, initialised with the built-in default on the first change.
     fn stored_mut(&mut self) -> &mut BTreeMap<String, String> {
         self.registries.get_or_insert_with(builtin)
     }

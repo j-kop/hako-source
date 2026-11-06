@@ -1,3 +1,5 @@
+//! Registries: cloning and pulling them with git, and finding packages across them.
+
 use crate::manifest::{valid_name, Manifest};
 use crate::paths::Paths;
 use anyhow::{bail, Context, Result};
@@ -8,6 +10,7 @@ use std::process::Command;
 /// Registry schema major version this client understands.
 pub const SCHEMA: u32 = 1;
 
+/// Contents of `hako-registry.toml`.
 #[derive(Deserialize)]
 struct RegistryMeta {
     schema: u32,
@@ -19,6 +22,7 @@ pub struct Registry {
     dir: PathBuf,
 }
 
+/// Runs `git` with `args` (in `cwd`, if given) and returns its trimmed output.
 fn git(args: &[&str], cwd: Option<&Path>) -> Result<String> {
     let mut cmd = Command::new("git");
     if let Some(d) = cwd {
@@ -59,6 +63,7 @@ pub fn update(paths: &Paths, name: &str, url: &str) -> Result<Registry> {
 }
 
 impl Registry {
+    /// Opens an already cloned registry and checks that its schema is supported.
     pub fn open(paths: &Paths, name: &str) -> Result<Self> {
         let dir = paths.registry(name);
         if !dir.exists() {
@@ -82,14 +87,17 @@ impl Registry {
         })
     }
 
+    /// Path of a package's manifest inside this registry.
     fn manifest_path(&self, pkg: &str) -> PathBuf {
         self.dir.join("packages").join(format!("{pkg}.toml"))
     }
 
+    /// Whether this registry has a manifest for `pkg`.
     pub fn has(&self, pkg: &str) -> bool {
         valid_name(pkg) && self.manifest_path(pkg).is_file()
     }
 
+    /// Loads and validates the manifest of `pkg`.
     pub fn load(&self, pkg: &str) -> Result<Manifest> {
         if !valid_name(pkg) {
             bail!("invalid package name `{pkg}`");
@@ -144,6 +152,7 @@ pub struct Registries {
 }
 
 impl Registries {
+    /// The registry called `name`, if it's configured.
     pub fn get(&self, name: &str) -> Option<&Registry> {
         self.list.iter().find(|r| r.name == name)
     }

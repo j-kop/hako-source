@@ -1,3 +1,5 @@
+//! Downloading release files over HTTP(S), or copying them from `file://` paths.
+
 use anyhow::{bail, Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::fs::File;
@@ -16,6 +18,7 @@ pub fn download(url: &str, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Fetches `url` into `out_path`, with a progress bar for HTTP downloads.
 fn fetch(url: &str, out_path: &Path) -> Result<()> {
     if let Some(p) = url.strip_prefix("file://") {
         std::fs::copy(p, out_path).with_context(|| format!("copying {p}"))?;

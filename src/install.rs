@@ -1,3 +1,5 @@
+//! Installing, upgrading and uninstalling packages.
+
 use crate::extract::{self, Kind};
 use crate::manifest::Manifest;
 use crate::paths::Paths;
@@ -8,6 +10,7 @@ use crate::{download, verify};
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 
+/// Splits `name@version` into the name and the optional version.
 pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
     match spec.split_once('@') {
         Some((n, v)) => (n, Some(v)),
@@ -15,6 +18,7 @@ pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
     }
 }
 
+/// Name of the link in `~/.hako/bin` for a bin path, e.g. `bin/rg` becomes `rg`.
 fn link_name(bin: &str) -> String {
     Path::new(bin)
         .file_name()
@@ -22,6 +26,8 @@ fn link_name(bin: &str) -> String {
         .unwrap_or_else(|| bin.to_string())
 }
 
+/// Installs one package given as `name`, `name@version` or `registry/name[@version]`.
+/// Downloads and verifies the release file, extracts it, and links its executables into `~/.hako/bin`.
 pub fn install(paths: &Paths, regs: &Registries, spec: &str, force: bool) -> Result<()> {
     let (qualified, req) = split_spec(spec);
     let (_, bare) = split_qualified(qualified);
@@ -215,6 +221,7 @@ fn remove_links(paths: &Paths, name: &str, bins: &[String]) {
     }
 }
 
+/// Removes a package's links, files and state entry.
 pub fn uninstall(paths: &Paths, name: &str) -> Result<()> {
     let mut state = State::load(paths)?;
     let Some(inst) = state.packages.remove(name) else {
@@ -230,6 +237,7 @@ pub fn uninstall(paths: &Paths, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Upgrades every installed package (or just `only`) to the latest version in the registry it came from.
 pub fn upgrade(paths: &Paths, regs: &Registries, only: Option<&str>) -> Result<()> {
     let state = State::load(paths)?;
     let names: Vec<String> = match only {
@@ -286,6 +294,7 @@ pub fn upgrade(paths: &Paths, regs: &Registries, only: Option<&str>) -> Result<(
     Ok(())
 }
 
+/// Whether `~/.hako/bin` is on `$PATH`.
 pub fn bin_on_path(paths: &Paths) -> bool {
     let bin = paths.bin();
     let canon = std::fs::canonicalize(&bin).unwrap_or(bin);
@@ -297,6 +306,7 @@ pub fn bin_on_path(paths: &Paths) -> bool {
         .unwrap_or(false)
 }
 
+/// Prints how to add `~/.hako/bin` to `$PATH` if it's missing.
 fn path_hint(paths: &Paths) {
     if !bin_on_path(paths) {
         eprintln!(

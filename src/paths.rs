@@ -1,3 +1,5 @@
+//! On-disk layout of `$HAKO_HOME` (default `~/.hako`).
+
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
@@ -8,6 +10,7 @@ pub struct Paths {
 }
 
 impl Paths {
+    /// Uses `$HAKO_HOME` as the root, falling back to `~/.hako`.
     pub fn new() -> Result<Self> {
         let root = match std::env::var_os("HAKO_HOME") {
             Some(p) if !p.is_empty() => PathBuf::from(p),
@@ -18,9 +21,11 @@ impl Paths {
         Ok(Self { root })
     }
 
+    /// Directory holding all registry clones.
     pub fn registries(&self) -> PathBuf {
         self.root.join("registries")
     }
+    /// Clone directory of the registry `name`.
     pub fn registry(&self, name: &str) -> PathBuf {
         self.registries().join(name)
     }
@@ -35,25 +40,32 @@ impl Paths {
         }
         Ok(())
     }
+    /// Extracted packages, as `pkgs/<name>/<version>/`.
     pub fn pkgs(&self) -> PathBuf {
         self.root.join("pkgs")
     }
+    /// Symlinks to package executables; this is the directory users put on `$PATH`.
     pub fn bin(&self) -> PathBuf {
         self.root.join("bin")
     }
+    /// Downloaded release files, reused when reinstalling.
     pub fn cache(&self) -> PathBuf {
         self.root.join("cache")
     }
+    /// Staging area for extracting archives.
     pub fn tmp(&self) -> PathBuf {
         self.root.join("tmp")
     }
+    /// Path of `config.toml`.
     pub fn config_file(&self) -> PathBuf {
         self.root.join("config.toml")
     }
+    /// Path of `installed.toml`.
     pub fn state_file(&self) -> PathBuf {
         self.root.join("installed.toml")
     }
 
+    /// Creates the working directories if they don't exist.
     pub fn ensure(&self) -> Result<()> {
         for d in [self.pkgs(), self.bin(), self.cache(), self.tmp()] {
             std::fs::create_dir_all(&d)

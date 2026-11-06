@@ -1,9 +1,12 @@
+//! Unpacking release files safely into a staging directory.
+
 use crate::manifest::is_safe_relative;
 use anyhow::{bail, Context, Result};
 use std::fs::File;
 use std::io::{BufReader, Cursor, Read};
 use std::path::Path;
 
+/// Format of a release file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     TarGz,
@@ -14,6 +17,8 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// Detects the format from the URL's file extension.
+    /// Anything unrecognised is treated as a raw executable.
     pub fn from_url(url: &str) -> Self {
         let path = url.split(['?', '#']).next().unwrap_or(url).to_ascii_lowercase();
         if path.ends_with(".tar.gz") || path.ends_with(".tgz") {
@@ -60,6 +65,7 @@ pub fn extract(archive: &Path, kind: Kind, dest: &Path, raw_rel: &Path) -> Resul
     }
 }
 
+/// Unpacks a tar stream into `dest`, rejecting absolute paths and `..` entries.
 fn untar<R: Read>(reader: R, dest: &Path) -> Result<()> {
     let mut ar = tar::Archive::new(reader);
     ar.set_preserve_permissions(true);
@@ -81,6 +87,7 @@ fn untar<R: Read>(reader: R, dest: &Path) -> Result<()> {
     Ok(())
 }
 
+/// Unpacks a zip archive into `dest`, rejecting unsafe paths and keeping Unix permissions.
 fn unzip(archive: &Path, dest: &Path) -> Result<()> {
     let mut za = zip::ZipArchive::new(File::open(archive)?).context("reading zip archive")?;
     for i in 0..za.len() {
@@ -123,6 +130,7 @@ mod tests {
         assert_eq!(Kind::from_url("https://x/hello"), Kind::Raw);
     }
 
+    /// Builds a one-file tar with a raw entry name, bypassing the tar crate's own path checks.
     fn tar_with_name(name: &[u8]) -> Vec<u8> {
         let mut b = tar::Builder::new(Vec::new());
         let mut h = tar::Header::new_gnu();

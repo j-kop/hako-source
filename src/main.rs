@@ -1,3 +1,6 @@
+//! hako (箱): a git-based package manager.
+//! Registries are git repos of package manifests; packages are prebuilt binaries installed into `~/.hako`.
+
 mod cli;
 mod config;
 mod download;
@@ -18,6 +21,7 @@ use paths::Paths;
 use registry::{Registries, Registry};
 use state::State;
 
+/// Entry point: runs the command and exits with status 1 on error.
 fn main() {
     let cli = Cli::parse();
     if let Err(e) = run(cli) {
@@ -67,6 +71,7 @@ fn update_all(paths: &Paths) -> Result<(Registries, usize)> {
     Ok((Registries { list }, failed))
 }
 
+/// Runs one CLI command.
 fn run(cli: Cli) -> Result<()> {
     let paths = Paths::new()?;
     paths.migrate()?;
@@ -189,6 +194,7 @@ fn run(cli: Cli) -> Result<()> {
     Ok(())
 }
 
+/// Handles `hako registry list|add|remove`.
 fn registry_cmd(paths: &Paths, action: RegistryCmd) -> Result<()> {
     let mut cfg = Config::load(paths)?;
     match action {
@@ -241,6 +247,7 @@ fn registry_cmd(paths: &Paths, action: RegistryCmd) -> Result<()> {
     Ok(())
 }
 
+/// Checks the environment and prints one ok/FAIL line per check.
 fn doctor(paths: &Paths) -> Result<()> {
     let mut ok = true;
     let mut check = |good: bool, msg: String| {

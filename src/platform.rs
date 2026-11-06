@@ -1,3 +1,5 @@
+//! Detecting the current platform key, e.g. `x86_64-linux`.
+
 use anyhow::{bail, Result};
 
 /// Target key used in manifests, e.g. `x86_64-linux`, `aarch64-macos`.
@@ -5,6 +7,7 @@ pub fn current_target() -> Result<String> {
     target_for(std::env::consts::ARCH, std::env::consts::OS)
 }
 
+/// Platform key for an architecture and OS name, or an error if hako doesn't support them.
 pub fn target_for(arch: &str, os: &str) -> Result<String> {
     let arch = match arch {
         "x86_64" | "aarch64" => arch,

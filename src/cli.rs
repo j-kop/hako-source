@@ -1,5 +1,8 @@
+//! Command-line interface, defined with clap.
+
 use clap::{Parser, Subcommand};
 
+/// Parsed command line.
 #[derive(Parser, Debug)]
 #[command(name = "hako", version, about = "箱 (hako) — a git-based package manager")]
 pub struct Cli {
@@ -7,6 +10,7 @@ pub struct Cli {
     pub cmd: Cmd,
 }
 
+/// Top-level commands.
 #[derive(Subcommand, Debug)]
 pub enum Cmd {
     /// Clone or pull the package registry
@@ -43,6 +47,7 @@ pub enum Cmd {
     },
 }
 
+/// Subcommands of `hako registry`.
 #[derive(Subcommand, Debug)]
 pub enum RegistryCmd {
     /// List configured registries

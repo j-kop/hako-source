@@ -136,6 +136,7 @@ export PATH="$HOME/.hako/bin:$PATH"
 ```sh
 cargo build
 cargo test        # includes end-to-end tests against local git registries
+cargo doc --no-deps --document-private-items --open   # code docs (hako is a binary, so its items are private)
 ```
 
 The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a different one, run `hako registry add default <git-url>` or set `HAKO_REGISTRY`.

@@ -1,3 +1,5 @@
+//! Package manifests (`packages/<name>.toml`): parsing, validation and version selection.
+
 use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -18,12 +20,14 @@ pub struct Manifest {
     pub versions: BTreeMap<String, Version>,
 }
 
+/// One version of a package: its release file for each platform.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Version {
     pub targets: BTreeMap<String, Target>,
 }
 
+/// A release file to download and its expected checksum.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
@@ -31,6 +35,7 @@ pub struct Target {
     pub sha256: String,
 }
 
+/// Whether `name` is a valid package or registry name: lowercase letters, digits, `-` and `_`.
 pub fn valid_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
@@ -46,12 +51,14 @@ pub fn is_safe_relative(p: &Path) -> bool {
 }
 
 impl Manifest {
+    /// Parses and validates a manifest read from `packages/<expected_name>.toml`.
     pub fn parse(src: &str, expected_name: &str) -> Result<Self> {
         let m: Manifest = toml::from_str(src).context("invalid manifest TOML")?;
         m.validate(expected_name)?;
         Ok(m)
     }
 
+    /// Checks the name, bin paths, versions, checksums and URL schemes.
     fn validate(&self, expected_name: &str) -> Result<()> {
         if self.name != expected_name {
             bail!("manifest name `{}` does not match file name `{expected_name}`", self.name);
@@ -103,6 +110,7 @@ impl Manifest {
             .map(|(_, k, v)| (*k, *v))
     }
 
+    /// Picks the requested version (a leading `v` is allowed), or the latest one if none is given.
     pub fn resolve(&self, requested: Option<&str>) -> Result<(&str, &Version)> {
         match requested {
             None => self.latest().context("no versions available"),
@@ -124,8 +132,10 @@ impl Manifest {
 mod tests {
     use super::*;
 
+    /// Placeholder checksum for test manifests.
     const SHA: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
+    /// A valid manifest with stable and pre-release versions.
     fn sample() -> String {
         format!(
             r#"
