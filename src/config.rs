@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 pub const DEFAULT_NAME: &str = "default";
 
 /// Built-in registry, used until the user configures registries themselves.
-pub const DEFAULT_REGISTRY: Option<&str> = Some("git@github.com:j-kop/hako-packages.git");
+pub const DEFAULT_REGISTRY: Option<&str> = Some("https://github.com/j-kop/hako-packages.git");
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Config {

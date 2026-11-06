@@ -336,3 +336,57 @@ fn migrates_single_registry_setup() {
     let listed = stdout(c.arg("list"));
     assert!(listed.lines().any(|l| l.starts_with("old") && l.contains("default")), "{listed}");
 }
+
+/// tar.gz with `hako-<version>/hako` = a copy of the real hako binary under test.
+fn package_hako(path: &Path, version: &str) -> String {
+    let exe = std::fs::read(assert_cmd::cargo::cargo_bin("hako")).unwrap();
+    let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+    let mut b = tar::Builder::new(gz);
+    let mut h = tar::Header::new_gnu();
+    h.set_size(exe.len() as u64);
+    h.set_mode(0o755);
+    h.set_cksum();
+    b.append_data(&mut h, format!("hako-{version}/hako"), exe.as_slice())
+        .unwrap();
+    let bytes = b.into_inner().unwrap().finish().unwrap();
+    std::fs::write(path, &bytes).unwrap();
+    hex::encode(Sha256::digest(&bytes))
+}
+
+#[test]
+fn hako_upgrades_itself() {
+    let env = Env::new();
+    let v1 = env.assets.join("hako-1.0.0.tar.gz");
+    let sha1 = package_hako(&v1, "1.0.0");
+    env.publish("hako", &manifest_bin("hako", "hako", &[("1.0.0", &v1, &sha1)]));
+
+    // Bootstrap: the cargo-built hako installs hako (what install.sh does).
+    stdout(env.hako().args(["install", "hako"]));
+    let installed = env.home.join("bin/hako");
+    let self_hako = || {
+        let mut c = Command::new(&installed);
+        c.env("HAKO_HOME", &env.home).env("HAKO_REGISTRY", &env.reg);
+        c
+    };
+    assert!(stdout(self_hako().arg("list")).contains("hako"));
+
+    // Publish a new version, then let the *installed* hako replace itself while running.
+    let v2 = env.assets.join("hako-1.1.0.tar.gz");
+    let sha2 = package_hako(&v2, "1.1.0");
+    env.publish(
+        "hako",
+        &manifest_bin("hako", "hako", &[("1.0.0", &v1, &sha1), ("1.1.0", &v2, &sha2)]),
+    );
+    let out = stdout(self_hako().arg("upgrade"));
+    assert!(out.contains("upgraded hako 1.0.0 -> 1.1.0"), "{out}");
+    assert!(!env.home.join("pkgs/hako/1.0.0").exists());
+    assert!(std::fs::read_link(&installed)
+        .unwrap()
+        .ends_with("pkgs/hako/1.1.0/hako"));
+
+    // The new copy works, and hako can uninstall itself too.
+    assert!(stdout(self_hako().arg("--version")).starts_with("hako "));
+    assert!(stdout(self_hako().arg("upgrade")).contains("everything is up to date"));
+    stdout(self_hako().args(["uninstall", "hako"]));
+    assert!(installed.symlink_metadata().is_err());
+}

@@ -1,0 +1,104 @@
+name: release
+
+# Push a tag like v0.2.0 (matching the version in Cargo.toml) to build hako for
+# every supported platform and publish a GitHub Release. The release includes
+# hako.toml, a ready-made manifest for the hako-packages registry.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          # Linux builds are static (musl), so they run on any distro.
+          - { key: x86_64-linux,  target: x86_64-unknown-linux-musl,  os: ubuntu-latest }
+          - { key: aarch64-linux, target: aarch64-unknown-linux-musl, os: ubuntu-24.04-arm }
+          - { key: x86_64-macos,  target: x86_64-apple-darwin,        os: macos-latest, cross: true }
+          - { key: aarch64-macos, target: aarch64-apple-darwin,       os: macos-latest }
+    runs-on: ${{ matrix.os }}
+    env:
+      # ring's C code builds fine with the host compiler for musl targets.
+      CC_x86_64_unknown_linux_musl: gcc
+      CC_aarch64_unknown_linux_musl: gcc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches Cargo.toml
+        shell: bash
+        run: |
+          version=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            exit 1
+          fi
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Smoke test
+        if: ${{ !matrix.cross }}
+        run: target/${{ matrix.target }}/release/hako --version
+
+      - name: Package
+        shell: bash
+        run: |
+          dir="hako-${GITHUB_REF_NAME#v}-${{ matrix.key }}"
+          mkdir "$dir"
+          cp "target/${{ matrix.target }}/release/hako" README.md "$dir/"
+          tar czf "hako-${{ matrix.key }}.tar.gz" "$dir"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hako-${{ matrix.key }}
+          path: hako-${{ matrix.key }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Generate checksums and registry manifest
+        working-directory: dist
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
+          sha256sum hako-*.tar.gz > SHA256SUMS
+          {
+            echo 'name        = "hako"'
+            echo 'description = "Git-based package manager (hako itself)"'
+            echo "repo        = \"https://github.com/$GITHUB_REPOSITORY\""
+            echo 'license     = "MIT"'
+            echo 'bin         = ["hako"]'
+            for key in x86_64-linux aarch64-linux x86_64-macos aarch64-macos; do
+              file="hako-$key.tar.gz"
+              echo
+              echo "[versions.\"$version\".targets.$key]"
+              echo "url    = \"$base/$file\""
+              echo "sha256 = \"$(sha256sum "$file" | cut -d' ' -f1)\""
+            done
+          } > hako.toml
+          cat hako.toml
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" dist/*
+          --repo "$GITHUB_REPOSITORY"
+          --title "hako $GITHUB_REF_NAME"
+          --generate-notes

@@ -12,11 +12,15 @@ A git-based package manager. hako clones a **registry** git repo of package mani
 
 ## Install
 
+On Linux or macOS (needs `git`):
+
 ```sh
-cargo install --git ssh://git@github.com/j-kop/hako-source
+curl -fsSL https://raw.githubusercontent.com/j-kop/hako-source/main/install.sh | sh
 ```
 
-The repos are private, so hako fetches the registry over SSH (`git@github.com:j-kop/hako-packages.git`). You need an SSH key added to your GitHub account.
+This downloads the latest release, then has hako install itself into `~/.hako`. From then on, `hako upgrade` keeps hako up to date along with your other packages.
+
+Or build from source: `cargo install --git https://github.com/j-kop/hako-source`. A copy installed this way isn't managed by hako. To switch to the managed copy, run `hako install hako`, then `cargo uninstall hako`.
 
 ## Usage
 
@@ -80,3 +84,10 @@ cargo test        # includes end-to-end tests against local git registries
 ```
 
 The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a different one, run `hako registry add default <git-url>` or set `HAKO_REGISTRY`.
+
+## Releasing
+
+1. Bump `version` in `Cargo.toml`, commit, and push.
+2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
+3. The `release` workflow builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS and publishes a GitHub Release. The release includes the `.tar.gz` files, `SHA256SUMS`, and `hako.toml`.
+4. Copy the new `[versions."…"]` sections from the release's `hako.toml` into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
