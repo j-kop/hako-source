@@ -28,5 +28,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      # --locked: fail if Cargo.lock is out of date (e.g. a version bump without `cargo update --workspace`).
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked

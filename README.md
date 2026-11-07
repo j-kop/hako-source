@@ -143,22 +143,24 @@ The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a
 
 ## Releasing
 
-Releases are started by hand, and only the repository owner can start them.
+The version in `Cargo.toml` on `main` is always the latest released version, or the one about to be released. A release is made by merging a PR that changes that version. Only the repository owner can release.
 
-1. On GitHub, go to **Actions → release → Run workflow**, and keep **Use workflow from: main**.
-2. Fill in:
-   - **commit:** `latest` for the newest commit on `main`, or the id of any commit in `main`'s history;
-   - **bump:** `patch`, `minor` or `major`. The new version is counted from the latest release tag, e.g. `v0.2.0` + `minor` gives `v0.3.0`.
-3. The [`release`](.github/workflows/release.yml) workflow then:
-   1. runs clippy and the tests on Linux and macOS, for that commit;
-   2. creates a release commit (the chosen commit plus the version bump in `Cargo.toml` and `Cargo.lock`) and tags it `vX.Y.Z`;
-   3. builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS from the tag;
-   4. publishes a GitHub Release with the `.tar.gz` files, `SHA256SUMS` and `hako.toml`.
+1. **Create a version PR.** From an up-to-date `main` with no uncommitted changes, run:
+   ```sh
+   scripts/bump-version.sh patch    # or minor, major, or an exact version like 1.0.0
+   ```
+   The script changes the version in `Cargo.toml` and `Cargo.lock` on a new branch `release-vX.Y.Z`, pushes it, and prints the link for opening the PR.
+2. **Merge the PR** once CI is green. The [`release`](.github/workflows/release.yml) workflow then starts by itself and:
+   1. checks that the version isn't released yet, and isn't lower than the latest release;
+   2. runs clippy and the tests on Linux and macOS, for that commit;
+   3. tags that commit `vX.Y.Z`, so the tag is on `main`;
+   4. builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS from the tag;
+   5. publishes a GitHub Release with the `.tar.gz` files, `SHA256SUMS` and `hako.toml`.
 
-   If anything fails or is cancelled after the tag was created, the workflow deletes the tag and any partial release, so you can just run it again.
-4. Copy the new `[versions."…"]` sections from the release's `hako.toml` (also shown in the run's summary) into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
+   If anything fails or is cancelled after the tag was created, the workflow deletes the tag and any partial release. To retry, fix the problem, then go to **Actions → release → Run workflow**, which releases the current `main`.
+3. Copy the new `[versions."…"]` sections from the release's `hako.toml` (also shown in the run's summary) into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
 
-The release commit exists only on its tag, and `main` is never changed by a release. As a result, `version` in `Cargo.toml` on `main` stays at whatever it was last set to. The released binaries always report the correct version.
+Merges that don't change `Cargo.toml` never start a release. Merges that change it without a new version, such as a dependency update, are skipped.
 
 ## TODO / possible upgrades
 
