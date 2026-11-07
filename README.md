@@ -143,18 +143,24 @@ The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a
 
 ## Releasing
 
-1. Bump `version` in `Cargo.toml`, commit, and push.
-2. Tag and push: `git tag v0.3.0 && git push origin v0.3.0`.
-3. The `release` workflow builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS and publishes a GitHub Release. The release includes the `.tar.gz` files, `SHA256SUMS`, and `hako.toml`.
-4. Copy the new `[versions."…"]` sections from the release's `hako.toml` into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
+Releases are started by hand, and only the repository owner can start them.
+
+1. On GitHub, go to **Actions → release → Run workflow**, and keep **Use workflow from: main**.
+2. Fill in:
+   - **commit:** `latest` for the newest commit on `main`, or the id of any commit in `main`'s history;
+   - **bump:** `patch`, `minor` or `major`. The new version is counted from the latest release tag, e.g. `v0.2.0` + `minor` gives `v0.3.0`.
+3. The [`release`](.github/workflows/release.yml) workflow then:
+   1. runs clippy and the tests on Linux and macOS, for that commit;
+   2. creates a release commit (the chosen commit plus the version bump in `Cargo.toml` and `Cargo.lock`) and tags it `vX.Y.Z`;
+   3. builds hako for `x86_64`/`aarch64` × Linux (static musl)/macOS from the tag;
+   4. publishes a GitHub Release with the `.tar.gz` files, `SHA256SUMS` and `hako.toml`.
+
+   If anything fails or is cancelled after the tag was created, the workflow deletes the tag and any partial release, so you can just run it again.
+4. Copy the new `[versions."…"]` sections from the release's `hako.toml` (also shown in the run's summary) into `hako-packages/packages/hako.toml` and push. Users then get the new version with `hako upgrade`.
+
+The release commit exists only on its tag, and `main` is never changed by a release. As a result, `version` in `Cargo.toml` on `main` stays at whatever it was last set to. The released binaries always report the correct version.
 
 ## TODO / possible upgrades
-
-### Rework the release workflow
-The current [`release.yml`](.github/workflows/release.yml) works, but should be reworked before it's relied on. Things to decide:
-- how releases are triggered and versioned (today: a `vX.Y.Z` tag that must match `Cargo.toml`);
-- which platforms are built, and how (today: 4 builds on GitHub's runners, with static musl for Linux);
-- whether tags get a ruleset that stops published release tags from being moved or deleted.
 
 ### Automatic registry PR for new hako releases
 Replace manual step 4 of [Releasing](#releasing) with a job in the release workflow:
