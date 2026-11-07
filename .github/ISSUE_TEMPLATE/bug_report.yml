@@ -2,10 +2,6 @@ name: Bug report
 description: Something in hako doesn't work as expected
 labels: [bug]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for reporting! For **security problems**, please don't use this form; see [SECURITY.md](https://github.com/j-kop/hako-source/blob/main/SECURITY.md).
   - type: input
     id: version
     attributes:
