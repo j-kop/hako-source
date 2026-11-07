@@ -16,7 +16,7 @@ clap = { version = "4", features = ["derive"] }
 dirs = "5"
 flate2 = "1"
 hex = "0.4"
-indicatif = "0.17"
+indicatif = "0.18"
 lzma-rs = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls"] }
 semver = "1"
