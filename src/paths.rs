@@ -48,7 +48,7 @@ impl Paths {
     pub fn bin(&self) -> PathBuf {
         self.root.join("bin")
     }
-    /// Downloaded release files, reused when reinstalling.
+    /// Downloads in progress; each file is deleted once its install finishes.
     pub fn cache(&self) -> PathBuf {
         self.root.join("cache")
     }
@@ -63,6 +63,35 @@ impl Paths {
     /// Path of `installed.toml`.
     pub fn state_file(&self) -> PathBuf {
         self.root.join("installed.toml")
+    }
+    /// Lock file that keeps two hako runs from changing `~/.hako` at the same time.
+    pub fn lock_file(&self) -> PathBuf {
+        self.root.join("lock")
+    }
+
+    /// Takes the exclusive lock on `~/.hako`, first waiting for any other running hako.
+    /// The OS releases it when the returned file is dropped or hako exits, even after a crash.
+    pub fn lock(&self) -> Result<std::fs::File> {
+        std::fs::create_dir_all(&self.root)
+            .with_context(|| format!("creating {}", self.root.display()))?;
+        let path = self.lock_file();
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        match file.try_lock() {
+            Ok(()) => {}
+            Err(std::fs::TryLockError::WouldBlock) => {
+                eprintln!("waiting for another hako process to finish...");
+                file.lock().with_context(|| format!("locking {}", path.display()))?;
+            }
+            Err(std::fs::TryLockError::Error(e)) => {
+                return Err(e).with_context(|| format!("locking {}", path.display()));
+            }
+        }
+        Ok(file)
     }
 
     /// Creates the working directories if they don't exist.

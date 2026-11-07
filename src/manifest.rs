@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use std::path::{Component, Path};
 
 /// A package manifest: `packages/<name>.toml` in the registry repo.
+/// Unknown fields are ignored, so new optional fields don't break older hako versions.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Manifest {
     pub name: String,
     pub description: String,
@@ -22,14 +22,12 @@ pub struct Manifest {
 
 /// One version of a package: its release file for each platform.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Version {
     pub targets: BTreeMap<String, Target>,
 }
 
 /// A release file to download and its expected checksum.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct Target {
     pub url: String,
     pub sha256: String,
@@ -174,6 +172,16 @@ sha256 = "{SHA}"
         assert!(Manifest::parse(&sample().replace(SHA, "abc"), "hello").is_err());
         assert!(Manifest::parse(&sample().replace("[\"hello\"]", "[\"../x\"]"), "hello").is_err());
         assert!(Manifest::parse(&sample().replace("1.0.0\"", "one\""), "hello").is_err());
+    }
+
+    #[test]
+    fn ignores_unknown_fields() {
+        let extra = sample()
+            .replace("bin = [", "homepage = \"https://example.com\"\nbin = [")
+            .replace("url = \"https://example.com/a.tar.gz\"", "url = \"https://example.com/a.tar.gz\"\nsize = 123");
+        assert!(extra.contains("homepage") && extra.contains("size = 123"));
+        let m = Manifest::parse(&extra, "hello").unwrap();
+        assert_eq!(m.latest().unwrap().0, "1.10.0");
     }
 
     #[test]

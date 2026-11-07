@@ -75,7 +75,10 @@ pub fn install(paths: &Paths, regs: &Registries, spec: &str, force: bool) -> Res
         }
     }
 
-    // Download (reusing a verified cached copy if present).
+    // Download into the cache. Leftovers from interrupted runs are cleared first;
+    // that's safe because no other hako runs while we hold the `~/.hako` lock.
+    clear_dir(&paths.cache());
+    clear_dir(&paths.tmp());
     let file_name = target
         .url
         .rsplit('/')
@@ -85,22 +88,18 @@ pub fn install(paths: &Paths, regs: &Registries, spec: &str, force: bool) -> Res
     let cached = paths
         .cache()
         .join(format!("{name}-{version}-{target_key}-{file_name}"));
-    if !(cached.exists() && verify::verify(&cached, &target.sha256).is_ok()) {
-        println!("downloading {name} {version} ({target_key})");
-        download::download(&target.url, &cached)?;
-        if let Err(e) = verify::verify(&cached, &target.sha256) {
-            let _ = std::fs::remove_file(&cached);
-            return Err(e).context(format!("refusing to install {name} {version}"));
-        }
+    println!("downloading {name} {version} ({target_key})");
+    download::download(&target.url, &cached)?;
+    if let Err(e) = verify::verify(&cached, &target.sha256) {
+        let _ = std::fs::remove_file(&cached);
+        return Err(e).context(format!("refusing to install {name} {version}"));
     }
 
-    // Extract into a staging directory.
+    // Extract into a staging directory, then delete the download and the staging directory.
     let staging = paths.tmp().join(format!("{name}-{version}-{}", std::process::id()));
-    if staging.exists() {
-        std::fs::remove_dir_all(&staging)?;
-    }
     let result = stage_and_activate(paths, &m, version, &target.url, &cached, &staging);
     let _ = std::fs::remove_dir_all(&staging);
+    let _ = std::fs::remove_file(&cached);
     let final_dir = result?;
 
     // Swap symlinks.
@@ -175,6 +174,19 @@ fn stage_and_activate(
     std::fs::rename(&root, &final_dir)
         .with_context(|| format!("moving package into {}", final_dir.display()))?;
     Ok(final_dir)
+}
+
+/// Deletes everything inside `dir`, ignoring errors (it's only for leftovers).
+fn clear_dir(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for e in entries.flatten() {
+        let p = e.path();
+        let _ = if p.is_dir() && !p.is_symlink() {
+            std::fs::remove_dir_all(&p)
+        } else {
+            std::fs::remove_file(&p)
+        };
+    }
 }
 
 /// The package root is `staging` itself, or its single top-level directory
