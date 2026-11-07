@@ -150,6 +150,12 @@ The built-in default registry is `DEFAULT_REGISTRY` in `src/config.rs`. To use a
 
 ## TODO / possible upgrades
 
+### Rework the release workflow
+The current [`release.yml`](.github/workflows/release.yml) works, but should be reworked before it's relied on. Things to decide:
+- how releases are triggered and versioned (today: a `vX.Y.Z` tag that must match `Cargo.toml`);
+- which platforms are built, and how (today: 4 builds on GitHub's runners, with static musl for Linux);
+- whether tags get a ruleset that stops published release tags from being moved or deleted.
+
 ### Automatic registry PR for new hako releases
 Replace manual step 4 of [Releasing](#releasing) with a job in the release workflow:
 
