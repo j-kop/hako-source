@@ -57,7 +57,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/hako" README.md LICENSE "$dir/"
           tar czf "hako-${{ matrix.key }}.tar.gz" "$dir"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: hako-${{ matrix.key }}
           path: hako-${{ matrix.key }}.tar.gz
