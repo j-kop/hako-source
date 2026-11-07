@@ -2,6 +2,7 @@
 name = "hako"
 version = "0.2.2"
 edition = "2021"
+rust-version = "1.89" # File::lock
 description = "箱 (hako) — a git-based package manager"
 license = "MIT"
 repository = "https://github.com/j-kop/hako-source"

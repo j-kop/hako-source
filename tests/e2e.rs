@@ -172,11 +172,44 @@ fn install_run_upgrade_uninstall() {
     let out = std::process::Command::new(&bin).output().unwrap();
     assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "hello-v2");
     assert!(!env.home.join("pkgs/hello/1.0.0").exists());
+    for dir in ["cache", "tmp"] {
+        let left: Vec<_> = std::fs::read_dir(env.home.join(dir)).unwrap().collect();
+        assert!(left.is_empty(), "{dir}/ should be empty after installs: {left:?}");
+    }
 
     stdout(env.hako().args(["uninstall", "hello"]));
     assert!(bin.symlink_metadata().is_err());
     assert!(!env.home.join("pkgs/hello").exists());
     assert!(stdout(env.hako().arg("list")).contains("no packages installed"));
+}
+
+#[test]
+fn waits_for_another_running_hako() {
+    let env = Env::new();
+    let v1 = env.assets.join("hello-1.0.0.tar.gz");
+    let sha1 = make_tarball(&v1, "hello-v1");
+    env.publish("hello", &manifest("hello", &[("1.0.0", &v1, &sha1)]));
+    stdout(env.hako().arg("update"));
+
+    // Hold the lock as if another hako were running; a second hako must wait for it.
+    let lock = std::fs::File::open(env.home.join("lock")).unwrap();
+    lock.lock().unwrap();
+    let mut child = std::process::Command::new(assert_cmd::cargo::cargo_bin("hako"))
+        .arg("list")
+        .env("HAKO_HOME", &env.home)
+        .env("HAKO_REGISTRY", &env.reg)
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(500));
+    assert!(child.try_wait().unwrap().is_none(), "hako ran without waiting for the lock");
+
+    drop(lock);
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("waiting for another hako"));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("no packages installed"));
 }
 
 #[test]

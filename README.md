@@ -64,7 +64,7 @@ export PATH="$HOME/.hako/bin:$PATH"
 Open a new terminal, or run `source ~/.bashrc`, and check the result:
 
 ```sh
-hako --version         # e.g. hako 0.2.0
+hako --version         # prints hako X.Y.Z
 command -v hako        # should print /home/<you>/.hako/bin/hako
 hako doctor            # checks git, platform, registries, and PATH
 ```
@@ -108,12 +108,6 @@ hako registry remove registry-b    # its installed packages stay, but won't be u
 
 The built-in registry is called `default`. To point it elsewhere, run `hako registry add default <url>`.
 
-Add `~/.hako/bin` to your `PATH`:
-
-```sh
-export PATH="$HOME/.hako/bin:$PATH"
-```
-
 ## Environment
 
 - `HAKO_HOME`: root directory (default `~/.hako`)
@@ -125,10 +119,12 @@ export PATH="$HOME/.hako/bin:$PATH"
 ~/.hako/
   config.toml          registry names and URLs
   registries/<name>/   git clone of each registry
-  pkgs/<name>/<ver>/ extracted packages
-  bin/               symlinks to package executables
-  installed.toml     installed package state
-  cache/             downloaded assets
+  pkgs/<name>/<ver>/   extracted packages
+  bin/                 symlinks to package executables
+  installed.toml       installed package state
+  cache/               downloads in progress (emptied after each install)
+  tmp/                 archives being extracted (emptied after each install)
+  lock                 makes a second hako run wait until the first one finishes
 ```
 
 ## Development
@@ -165,7 +161,7 @@ Merges that don't change `Cargo.toml` never start a release. Merges that change 
 ## TODO / possible upgrades
 
 ### Automatic registry PR for new hako releases
-Replace manual step 4 of [Releasing](#releasing) with a job in the release workflow:
+Replace manual step 3 of [Releasing](#releasing) with a job in the release workflow:
 
 1. Download the new release's `hako.toml`.
 2. Clone `hako-packages` and add the new `[versions."X.Y.Z"]` sections to `packages/hako.toml`, keeping older versions.

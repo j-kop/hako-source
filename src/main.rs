@@ -74,6 +74,8 @@ fn update_all(paths: &Paths) -> Result<(Registries, usize)> {
 /// Runs one CLI command.
 fn run(cli: Cli) -> Result<()> {
     let paths = Paths::new()?;
+    // Held until hako exits, so concurrent runs wait instead of overwriting each other's changes.
+    let _lock = paths.lock()?;
     paths.migrate()?;
     match cli.cmd {
         Cmd::Update => {
