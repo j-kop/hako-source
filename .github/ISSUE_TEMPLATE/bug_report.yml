@@ -1,0 +1,48 @@
+name: Bug report
+description: Something in hako doesn't work as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! For **security problems**, please don't use this form; see [SECURITY.md](https://github.com/j-kop/hako-source/blob/main/SECURITY.md).
+  - type: input
+    id: version
+    attributes:
+      label: hako version
+      description: Output of `hako --version`
+      placeholder: hako 0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - x86_64-linux
+        - aarch64-linux
+        - x86_64-macos
+        - aarch64-macos
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: The command you ran, what you expected, and what happened instead.
+      placeholder: |
+        I ran `hako install foo` and expected ..., but ...
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The full output of the command, plus `hako doctor` if it's relevant.
+      render: shell
+  - type: textarea
+    id: registry
+    attributes:
+      label: Registry / manifest
+      description: If a specific package or registry is involved, link it or paste its manifest.
+      render: toml
