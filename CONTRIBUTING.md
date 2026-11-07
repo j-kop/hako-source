@@ -5,7 +5,6 @@ Thanks for your interest! Bug reports, ideas and pull requests are all welcome.
 ## Before you start
 
 - **Bugs and ideas:** open an [issue](https://github.com/j-kop/hako-source/issues/new/choose) first, especially for larger changes, so we can agree on the approach.
-- **Security problems:** report them privately, as described in [SECURITY.md](SECURITY.md). Please don't open a public issue.
 - **Packages:** [hako-packages](https://github.com/j-kop/hako-packages) is only a demo registry and doesn't take package submissions. To distribute packages, [set up your own registry](https://github.com/j-kop/hako-packages#how-to-set-up-your-own-registry).
 
 ## Development
