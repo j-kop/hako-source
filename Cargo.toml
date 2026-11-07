@@ -24,7 +24,7 @@ serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
 tar = "0.4"
 toml = "0.8"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]
 assert_cmd = "2"
