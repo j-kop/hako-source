@@ -1,6 +1,6 @@
 [package]
 name = "hako"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2021"
 description = "箱 (hako) — a git-based package manager"
 license = "MIT"
