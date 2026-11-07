@@ -3,6 +3,6 @@ contact_links:
   - name: Report a security vulnerability
     url: https://github.com/j-kop/hako-source/security/advisories/new
     about: Please report security problems privately, not as a public issue.
-  - name: Add or update a package
-    url: https://github.com/j-kop/hako-packages
-    about: Packages live in the hako-packages registry. Open a pull request there.
+  - name: Distribute your own packages
+    url: https://github.com/j-kop/hako-packages#how-to-set-up-your-own-registry
+    about: hako-packages is only a demo registry. To publish packages, set up your own registry.
